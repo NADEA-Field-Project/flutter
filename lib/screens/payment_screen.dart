@@ -1,15 +1,113 @@
 import 'package:flutter/material.dart';
+import '../services/api_service.dart';
+import 'main_navigation.dart';
 
-class PaymentScreen extends StatelessWidget {
-  const PaymentScreen({super.key});
+class PaymentScreen extends StatefulWidget {
+  final double totalAmount;
+  const PaymentScreen({super.key, required this.totalAmount});
+
+  @override
+  State<PaymentScreen> createState() => _PaymentScreenState();
+}
+
+class _PaymentScreenState extends State<PaymentScreen> {
+  final ApiService _apiService = ApiService();
+  final TextEditingController _nameController = TextEditingController(text: 'User');
+  final TextEditingController _phoneController = TextEditingController(text: '010-1234-5678');
+  final TextEditingController _addressController = TextEditingController(text: '서울시 강남구 테헤란로 123');
+  List<dynamic> _cartItems = [];
+  bool _isLoading = false;
+  bool _isLoadingCart = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchCartItems();
+  }
+
+  Future<void> _fetchCartItems() async {
+    try {
+      final result = await _apiService.getCart();
+      if (mounted) {
+        setState(() {
+          _cartItems = result['items'] ?? [];
+          _isLoadingCart = false;
+        });
+      }
+    } catch (e) {
+      setState(() => _isLoadingCart = false);
+    }
+  }
+
+  Future<void> _handlePayment() async {
+    if (_addressController.text.isEmpty || _phoneController.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enter delivery info')),
+      );
+      return;
+    }
+
+    setState(() => _isLoading = true);
+
+    try {
+      final result = await _apiService.placeOrder(
+        address: _addressController.text,
+        contact: _phoneController.text,
+        paymentMethod: 'Credit Card',
+      );
+
+      if (mounted) {
+        if (result['success'] == true) {
+          showDialog(
+            context: context,
+            barrierDismissible: false,
+            builder: (context) => AlertDialog(
+              title: const Text('Order Complete'),
+              content: const Text('Your order has been placed successfully.'),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    Navigator.of(context).pushAndRemoveUntil(
+                      MaterialPageRoute(builder: (context) => const MainNavigation()),
+                      (route) => false,
+                    );
+                  },
+                  child: const Text('OK'),
+                ),
+              ],
+            ),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(result['message'] ?? 'Order failed')),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
+    final productAmount = widget.totalAmount - 3000;
+    
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
-        title: const Text('결제'),
+        title: const Text('Payment'),
         centerTitle: true,
+        backgroundColor: Colors.white,
+        foregroundColor: Colors.black,
+        elevation: 0,
         leading: IconButton(
           onPressed: () => Navigator.pop(context),
           icon: const Icon(Icons.arrow_back),
@@ -19,30 +117,31 @@ class PaymentScreen extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const SizedBox(height: 16),
+            // Delivery Info Section
             const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 20),
+              padding: EdgeInsets.fromLTRB(20, 16, 20, 12),
               child: Text('배송지 정보', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
             ),
-            const SizedBox(height: 16),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: Row(
-                children: const [
-                  Expanded(child: _InputField(label: '이름', value: '김토스')),
-                  SizedBox(width: 16),
-                  Expanded(child: _InputField(label: '전화번호', value: '010-1234-5678')),
+                children: [
+                  Expanded(child: _InputField(label: '이름', controller: _nameController, placeholder: '김토스')),
+                  const SizedBox(width: 12),
+                  Expanded(child: _InputField(label: '전화번호', controller: _phoneController, placeholder: '010-1234-5678')),
                 ],
               ),
             ),
-            const SizedBox(height: 16),
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 20),
-              child: _InputField(label: '주소', value: '서울시 강남구 테헤란로 123', hasSearch: true),
+            const SizedBox(height: 12),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: _InputField(label: '주소', controller: _addressController, hasSearch: true, placeholder: '서울시 강남구 테헤란로 123'),
             ),
-            const SizedBox(height: 32),
+            const SizedBox(height: 24),
             const Divider(height: 8, thickness: 8, color: Color(0xFFF9FAFB)),
-            const SizedBox(height: 32),
+            
+            // Payment Method Section
+            const SizedBox(height: 24),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: Row(
@@ -51,114 +150,172 @@ class PaymentScreen extends StatelessWidget {
                   const Text('결제 수단', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                   TextButton(
                     onPressed: () {},
-                    child: const Text('카드 변경', style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)),
+                    child: Text('카드 변경', style: TextStyle(color: Colors.grey[600], fontWeight: FontWeight.w500)),
                   ),
                 ],
               ),
             ),
-            const SizedBox(height: 16),
-            // Credit Card Mockup
+            const SizedBox(height: 12),
+            // Credit Card
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: Container(
-                height: 200,
+                height: 180,
                 width: double.infinity,
                 decoration: BoxDecoration(
                   color: const Color(0xFF1C1C1E),
-                  borderRadius: BorderRadius.circular(24),
-                  boxShadow: [
-                    BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 20, offset: const Offset(0, 10)),
-                  ],
+                  borderRadius: BorderRadius.circular(20),
                 ),
-                padding: const EdgeInsets.all(24),
+                padding: const EdgeInsets.all(20),
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Image.network(
-                          'https://lh3.googleusercontent.com/aida-public/AB6AXuBrOOT_ykf8ts3Soe3hgJiZjmKEAmLmbBc8zllufg8_i1D8uVhtwh_Z3j9PPqQMq_jxjB3SSyFuAafIgCVTOVwYFARXWnfXvxhU4Ui7FJOtirO1UzgXbrms_cfX1Fxv6nLzBnt9rqjFhAJW770njBfgNYlwq0LchCNX7zunmAM3qHejX-OyCEowOOTiUJKOqeR8gpN5lwFFIiFlM-ND8quti-H3hvIUE_RUdqwk2uWnUTC5B5VoxFYQQkCBCpEduoewWMg8Ub21LwM',
-                          height: 32,
-                          color: Colors.white.withOpacity(0.9),
+                        Row(
+                          children: List.generate(4, (i) => Container(
+                            width: 8, height: 8, 
+                            margin: const EdgeInsets.only(right: 4),
+                            decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+                          )),
                         ),
-                        Icon(Icons.contactless, color: Colors.white.withOpacity(0.5)),
+                        Icon(Icons.contactless, color: Colors.white.withOpacity(0.6)),
                       ],
                     ),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                    const Text('•••• •••• •••• 8892', style: TextStyle(color: Colors.white, fontSize: 18, letterSpacing: 2, fontWeight: FontWeight.w500)),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Text(
-                          '••••  ••••  ••••  8892',
-                          style: TextStyle(color: Colors.white, fontSize: 20, letterSpacing: 2, fontWeight: FontWeight.bold),
+                        _CardInfo(label: 'CARD HOLDER', value: _nameController.text.toUpperCase()),
+                        const _CardInfo(label: 'EXPIRES', value: '12/28'),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            // Card Detail Inputs
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Column(
+                children: [
+                  _InputField(label: '카드 번호', prefixIcon: Icons.credit_card, placeholder: '0000 0000 0000 0000'),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      const Expanded(child: _InputField(label: '유효기간', placeholder: 'MM/YY')),
+                      const SizedBox(width: 12),
+                      Expanded(child: _InputField(label: 'CVC', placeholder: '123', suffixIcon: Icons.help_outline)),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 24),
+            const Divider(height: 8, thickness: 8, color: Color(0xFFF9FAFB)),
+            
+            // Order Items Section
+            const SizedBox(height: 24),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('주문 내역', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 16),
+                  Container(
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: Colors.grey[100]!),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.02),
+                          blurRadius: 10,
+                          offset: const Offset(0, 4),
                         ),
+                      ],
+                    ),
+                    child: Column(
+                      children: [
+                        _isLoadingCart
+                            ? const CircularProgressIndicator(color: Colors.black)
+                            : Column(
+                                children: _cartItems.map((item) {
+                                  return Padding(
+                                    padding: const EdgeInsets.only(bottom: 16),
+                                    child: Row(
+                                      children: [
+                                        Container(
+                                          width: 48,
+                                          height: 48,
+                                          decoration: BoxDecoration(
+                                            color: const Color(0xFFF9FAFB),
+                                            borderRadius: BorderRadius.circular(12),
+                                          ),
+                                          child: Icon(
+                                            item['name']?.toLowerCase().contains('cola') == true
+                                                ? Icons.local_drink
+                                                : Icons.lunch_dining,
+                                            color: Colors.black,
+                                            size: 24,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 16),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                item['name'] ?? 'Product',
+                                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                                              ),
+                                              Text(
+                                                '수량: ${item['quantity'] ?? 1}개',
+                                                style: TextStyle(fontSize: 13, color: Colors.grey[500]),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                        Text(
+                                          '₩${((double.tryParse(item['price'].toString()) ?? 0) * (item['quantity'] ?? 1)).toInt()}',
+                                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                                        ),
+                                      ],
+                                    ),
+                                  );
+                                }).toList(),
+                              ),
+                        const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 8),
+                          child: _DashedLine(),
+                        ),
+                        const SizedBox(height: 16),
+                        _SummaryRow(label: '상품 금액', value: '₩${productAmount.toInt()}'),
+                        const SizedBox(height: 12),
+                        const _SummaryRow(label: '배송비', value: '무료', isHighlight: true),
                         const SizedBox(height: 24),
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            _CardInfo(label: 'Card Holder', value: 'KIM TOSS'),
-                            _CardInfo(label: 'Expires', value: '12/28'),
+                            const Text('총 결제금액', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                            Text(
+                              '₩${widget.totalAmount.toInt()}',
+                              style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900),
+                            ),
                           ],
                         ),
                       ],
                     ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 32),
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 20),
-              child: _InputField(label: '카드 번호', placeholder: '0000 0000 0000 0000', prefixIcon: Icons.credit_card),
-            ),
-            const SizedBox(height: 16),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: Row(
-                children: const [
-                  Expanded(child: _InputField(label: '유효기간', placeholder: 'MM/YY')),
-                  SizedBox(width: 16),
-                  Expanded(child: _InputField(label: 'CVC', placeholder: '123', isPassword: true, suffixIcon: Icons.help_outline)),
+                  ),
                 ],
               ),
             ),
-            const SizedBox(height: 32),
-            const Divider(height: 8, thickness: 8, color: Color(0xFFF9FAFB)),
-            const SizedBox(height: 32),
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 20),
-              child: Text('주문 내역', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-            ),
-            const SizedBox(height: 16),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: Colors.grey[100]!),
-                ),
-                child: Column(
-                  children: const [
-                    _OrderItem(icon: Icons.lunch_dining, name: '치즈버거 세트', quantity: 1, price: '₩8,900'),
-                    SizedBox(height: 16),
-                    _OrderItem(icon: Icons.local_drink, name: '제로 콜라', quantity: 1, price: '₩2,000'),
-                    Padding(padding: EdgeInsets.symmetric(vertical: 16), child: _DashedLine()),
-                    _SummaryRow(label: '상품 금액', value: '₩10,900'),
-                    _SummaryRow(label: '배송비', value: '무료'),
-                    SizedBox(height: 12),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text('총 결제금액', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                        Text('₩10,900', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 120),
+            const SizedBox(height: 140),
           ],
         ),
       ),
@@ -166,23 +323,39 @@ class PaymentScreen extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(20, 20, 20, 40),
         decoration: BoxDecoration(
           color: Colors.white,
-          border: Border(top: BorderSide(color: Colors.grey[100]!)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 10,
+              offset: const Offset(0, -5),
+            ),
+          ],
         ),
         child: ElevatedButton(
-          onPressed: () {},
+          onPressed: _isLoading ? null : _handlePayment,
           style: ElevatedButton.styleFrom(
             backgroundColor: Colors.black,
-            minimumSize: const Size.fromHeight(56),
+            minimumSize: const Size.fromHeight(60),
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            elevation: 0,
           ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: const [
-              Text('결제 완료', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-              SizedBox(width: 8),
-              Icon(Icons.check, size: 20),
-            ],
-          ),
+          child: _isLoading
+              ? const SizedBox(
+                  height: 24,
+                  width: 24,
+                  child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                )
+              : Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      '₩${widget.totalAmount.toInt()} 결제 완료',
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.white),
+                    ),
+                    const SizedBox(width: 8),
+                    const Icon(Icons.keyboard_arrow_down, color: Colors.white),
+                  ],
+                ),
         ),
       ),
     );
@@ -191,7 +364,7 @@ class PaymentScreen extends StatelessWidget {
 
 class _InputField extends StatelessWidget {
   final String label;
-  final String? value;
+  final TextEditingController? controller;
   final String? placeholder;
   final bool hasSearch;
   final IconData? prefixIcon;
@@ -200,7 +373,7 @@ class _InputField extends StatelessWidget {
 
   const _InputField({
     required this.label,
-    this.value,
+    this.controller,
     this.placeholder,
     this.hasSearch = false,
     this.prefixIcon,
@@ -213,26 +386,43 @@ class _InputField extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label.toUpperCase(), style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: Colors.grey[500], letterSpacing: 1.2)),
+        Text(
+          label.toUpperCase(),
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.bold,
+            color: Colors.grey[400],
+          ),
+        ),
         const SizedBox(height: 8),
         TextField(
-          controller: TextEditingController(text: value),
+          controller: controller,
           obscureText: isPassword,
+          style: const TextStyle(fontWeight: FontWeight.bold),
           decoration: InputDecoration(
             hintText: placeholder,
             hintStyle: TextStyle(color: Colors.grey[300]),
-            prefixIcon: prefixIcon != null ? Icon(prefixIcon, color: Colors.grey[400]) : null,
+            prefixIcon: prefixIcon != null ? Icon(prefixIcon, color: Colors.grey[400], size: 20) : null,
             suffixIcon: hasSearch
                 ? const Icon(Icons.search, color: Colors.black)
                 : suffixIcon != null
-                    ? Icon(suffixIcon, color: Colors.grey[400])
+                    ? Icon(suffixIcon, color: Colors.grey[400], size: 20)
                     : null,
-            contentPadding: const EdgeInsets.all(15),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
             filled: true,
             fillColor: Colors.white,
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey[200]!)),
-            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey[200]!)),
-            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Colors.black)),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(color: Colors.grey[200]!),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(color: Colors.grey[200]!),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: const BorderSide(color: Colors.black, width: 1.5),
+            ),
           ),
         ),
       ],
@@ -250,43 +440,15 @@ class _CardInfo extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label.toUpperCase(), style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 8, letterSpacing: 1)),
+        Text(
+          label.toUpperCase(),
+          style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 9, fontWeight: FontWeight.bold),
+        ),
         const SizedBox(height: 4),
-        Text(value, style: TextStyle(color: Colors.white.withOpacity(0.9), fontSize: 12, fontWeight: FontWeight.bold)),
-      ],
-    );
-  }
-}
-
-class _OrderItem extends StatelessWidget {
-  final IconData icon;
-  final String name;
-  final int quantity;
-  final String price;
-
-  const _OrderItem({required this.icon, required this.name, required this.quantity, required this.price});
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Container(
-          width: 40,
-          height: 40,
-          decoration: BoxDecoration(color: const Color(0xFFF9FAFB), borderRadius: BorderRadius.circular(8)),
-          child: Icon(icon, color: Colors.black, size: 20),
+        Text(
+          value,
+          style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
         ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-              Text('수량: $quantity개', style: TextStyle(fontSize: 12, color: Colors.grey[500])),
-            ],
-          ),
-        ),
-        Text(price, style: const TextStyle(fontWeight: FontWeight.bold)),
       ],
     );
   }
@@ -295,19 +457,29 @@ class _OrderItem extends StatelessWidget {
 class _SummaryRow extends StatelessWidget {
   final String label;
   final String value;
-  const _SummaryRow({required this.label, required this.value});
+  final bool isHighlight;
+
+  const _SummaryRow({
+    required this.label,
+    required this.value,
+    this.isHighlight = false,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 4),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(label, style: TextStyle(color: Colors.grey[500], fontSize: 13)),
-          Text(value, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
-        ],
-      ),
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(label, style: TextStyle(color: Colors.grey[500], fontSize: 14)),
+        Text(
+          value,
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: isHighlight ? FontWeight.bold : FontWeight.w500,
+            color: isHighlight ? Colors.grey[400] : Colors.black,
+          ),
+        ),
+      ],
     );
   }
 }
@@ -329,7 +501,7 @@ class _DashedLine extends StatelessWidget {
             return SizedBox(
               width: dashWidth,
               height: 1,
-              child: DecoratedBox(decoration: BoxDecoration(color: Colors.grey[200])),
+              child: DecoratedBox(decoration: BoxDecoration(color: Colors.grey[100]!)),
             );
           }),
         );

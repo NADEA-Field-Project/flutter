@@ -1,128 +1,206 @@
 import 'package:flutter/material.dart';
+import '../services/api_service.dart';
+import 'payment_screen.dart';
 
-class CartScreen extends StatelessWidget {
+class CartScreen extends StatefulWidget {
   const CartScreen({super.key});
+
+  @override
+  State<CartScreen> createState() => _CartScreenState();
+}
+
+class _CartScreenState extends State<CartScreen> {
+  final ApiService _apiService = ApiService();
+  List<dynamic> _cartItems = [];
+  bool _isLoading = true;
+  double _totalAmount = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchCart();
+  }
+
+  Future<void> _fetchCart() async {
+    setState(() => _isLoading = true);
+    try {
+      final result = await _apiService.getCart();
+      setState(() {
+        _cartItems = result['items'] ?? [];
+        _totalAmount = double.tryParse(result['totalPrice']?.toString() ?? '0') ?? 0;
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _cartItems = [];
+        _isLoading = false;
+      });
+    }
+  }
+
+  Future<void> _handleRemoveItem(int itemId) async {
+    try {
+      final result = await _apiService.removeFromCart(itemId);
+      if (result['success'] == true) {
+        _fetchCart();
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to remove: $e')));
+    }
+  }
+
+  Future<void> _handleUpdateQuantity(int itemId, int newQuantity) async {
+    try {
+      final result = await _apiService.updateCartItemQuantity(itemId, newQuantity);
+      if (result['success'] == true) {
+        _fetchCart();
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to update: $e')));
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
-        title: const Text('장바구니'),
+        title: const Text(
+          '장바구니',
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 20,
+          ),
+        ),
         centerTitle: true,
         leading: IconButton(
-          onPressed: () {},
+          onPressed: () => Navigator.pop(context),
           icon: const Icon(Icons.arrow_back),
         ),
-        actions: [
-          TextButton(
-            onPressed: () {},
-            child: const Text('전체 삭제', style: TextStyle(color: Colors.grey, fontSize: 13)),
-          ),
-        ],
       ),
-      body: SingleChildScrollView(
-        child: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.all(20),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : _cartItems.isEmpty
+              ? const Center(child: Text('장바구니가 비어있습니다.'))
+              : SingleChildScrollView(
+                  child: Column(
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.all(20),
+                        child: Column(
+                          children: _cartItems.map((item) {
+                            return Padding(
+                              padding: const EdgeInsets.only(bottom: 24),
+                              child: _CartItem(
+                                title: item['name'] ?? '상품명',
+                                options: item['options']?.toString() ?? '',
+                                price: '₩${item['price']}',
+                                quantity: item['quantity'] ?? 1,
+                                imageUrl: item['image_url'] ?? 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd',
+                                onRemove: () => _handleRemoveItem(item['id']),
+                                onIncrease: () => _handleUpdateQuantity(item['id'], (item['quantity'] ?? 1) + 1),
+                                onDecrease: () => _handleUpdateQuantity(item['id'], (item['quantity'] ?? 1) - 1),
+                              ),
+                            );
+                          }).toList(),
+                        ),
+                      ),
+                      const Divider(height: 1, thickness: 1, color: Color(0xFFF3F4F6), indent: 20, endIndent: 20),
+                      const SizedBox(height: 32),
+                      // Payment Summary
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 20),
+                        child: Container(
+                          padding: const EdgeInsets.all(24),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF9FAFB),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text('결제 정보', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                              const SizedBox(height: 20),
+                              _SummaryRow(label: '주문 금액', value: '₩${_totalAmount.toInt()}'),
+                              const SizedBox(height: 12),
+                              const _SummaryRow(label: '배달팁', value: '₩3,000'),
+                              const Padding(
+                                padding: EdgeInsets.symmetric(vertical: 16),
+                                child: _DashedLine(),
+                              ),
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  const Text(
+                                    '합계',
+                                    style: TextStyle(
+                                      fontSize: 20,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  Text(
+                                    '₩${(_totalAmount + 3000).toInt()}',
+                                    style: const TextStyle(
+                                      fontSize: 24,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.black,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 160),
+                    ],
+                  ),
+                ),
+      bottomSheet: _cartItems.isEmpty
+          ? null
+          : Container(
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 40),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                border: Border(top: BorderSide(color: Colors.grey[100]!)),
+                boxShadow: [
+                  BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 20, offset: const Offset(0, -4)),
+                ],
+              ),
               child: Column(
-                children: const [
-                  _CartItem(
-                    title: '더블 치즈버거 세트',
-                    options: '사이드: 감자튀김, 음료: 콜라',
-                    price: '9,500원',
-                    quantity: 1,
-                    imageUrl: 'https://lh3.googleusercontent.com/aida-public/AB6AXuAaAKd7cFEgwdEK5Pj6oShMDY208TUT6mAAVBRQAPY8UradpelSjTotgBgyeOBcOZjHjwq0du3Y6oJGyF95DPwCzhGhVrt5QU8plBdp49DrVwUkvoMHBUYNPMy60CZ-EVuVvhH9VN5rwG1DPL_hq7sPGqpkblW3yURtUUhxP45bmxQOLwtSoK58qbEQ3rZDTv8L-osQwD6D_ssmWsLkS-hV1xrX5tGEFcsK8-MtVPP7ibE83pTjhl6JlqnrIJBVqrqWhdydtXfSEbc',
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  ElevatedButton(
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => PaymentScreen(
+                            totalAmount: _totalAmount + 3000,
+                          ),
+                        ),
+                      );
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.black,
+                      foregroundColor: Colors.white,
+                      minimumSize: const Size.fromHeight(60),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                      elevation: 0,
+                    ),
+                    child: const Text(
+                      '결제하기',
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                    ),
                   ),
-                  SizedBox(height: 24),
-                  _CartItem(
-                    title: '페퍼로니 피자 (M)',
-                    options: '토핑 추가: 올리브, 치즈 크러스트',
-                    price: '16,000원',
-                    quantity: 1,
-                    imageUrl: 'https://lh3.googleusercontent.com/aida-public/AB6AXuAAWYuFthFKJVAOf6IqqCfkbUH6XeR4s9RUvcWag3PJEapH91CY91IzYzgRMepgFMtUwdSf9yP4LOmYZn4wyfNM6CpoFMaaF-QBu8nCEyDsQt6GDTgeQG79J7R4HCMLyzIi3MVEjuAhJqCS7c8a4TIh8IzgHHO1F7uUQXCZoSQZ-Kr40QUQPGXLIepA9FDOJZMWcvFKkZw6rLF5hu9UagClVYBxTmC_pynZ4AU-BmmTZVjHcvFQiWF-toeTewM8GBeJtdpTAi1AKKE',
-                  ),
-                  SizedBox(height: 24),
-                  _CartItem(
-                    title: '시저 샐러드',
-                    options: '드레싱: 발사믹',
-                    price: '7,000원',
-                    quantity: 2,
-                    imageUrl: 'https://lh3.googleusercontent.com/aida-public/AB6AXuAa48xzzzAEkhbDz0r7RlYqUjfooricATMR8gq11tLrpAzioUYBwKe823b7Jx8Umg5iYdlP6j5jVs3mqL_ZWRzkrdk9KYbJ-8kxfQEewdwGc36sqNY1W9nm0xBJOv8DskhwNpurtOCYnIv1MUrDcbLKallwVZSShjI09uKwxIiL55i-tbteF-LS4MYIkPrtoQPnkL70zfmHi5iqI6E-cHyAfXfMPvGq-JHIoO16tGvvBj1vY1gLwgwDEmKEIhz49CbEEJqIIrkbTqc',
+                  const SizedBox(height: 12),
+                  const Text(
+                    '위 주문 내용을 확인하였으며 결제에 동의합니다.',
+                    style: TextStyle(fontSize: 11, color: Colors.grey),
                   ),
                 ],
               ),
             ),
-            const Divider(height: 1, thickness: 1, color: Color(0xFFF3F4F6), indent: 20, endIndent: 20),
-            const SizedBox(height: 32),
-            // Payment Summary
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: Container(
-                padding: const EdgeInsets.all(24),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF9FAFB),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('결제 정보', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 20),
-                    const _SummaryRow(label: '주문 금액', value: '39,500원'),
-                    const SizedBox(height: 12),
-                    const _SummaryRow(label: '배달팁', value: '3,000원'),
-                    const SizedBox(height: 12),
-                    const _SummaryRow(label: '할인 금액', value: '-2,000원', isDiscount: true),
-                    const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 16),
-                      child: _DashedLine(),
-                    ),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: const [
-                        Text('총 결제 금액', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                        Text('40,500원', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900)),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 160),
-          ],
-        ),
-      ),
-      bottomSheet: Container(
-        padding: const EdgeInsets.fromLTRB(20, 20, 20, 40),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          border: Border(top: BorderSide(color: Colors.grey[100]!)),
-          boxShadow: [
-            BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 20, offset: const Offset(0, -4)),
-          ],
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ElevatedButton(
-              onPressed: () {},
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.black,
-                minimumSize: const Size.fromHeight(56),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-              ),
-              child: const Text('40,500원 결제하기', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18)),
-            ),
-            const SizedBox(height: 12),
-            const Text(
-              '주문 내용을 확인하였으며, 정보 제공 등에 동의합니다.',
-              style: TextStyle(fontSize: 11, color: Colors.grey),
-            ),
-          ],
-        ),
-      ),
     );
   }
 }
@@ -133,6 +211,9 @@ class _CartItem extends StatelessWidget {
   final String price;
   final int quantity;
   final String imageUrl;
+  final VoidCallback onRemove;
+  final VoidCallback? onIncrease;
+  final VoidCallback? onDecrease;
 
   const _CartItem({
     required this.title,
@@ -140,6 +221,9 @@ class _CartItem extends StatelessWidget {
     required this.price,
     required this.quantity,
     required this.imageUrl,
+    required this.onRemove,
+    this.onIncrease,
+    this.onDecrease,
   });
 
   @override
@@ -172,7 +256,12 @@ class _CartItem extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
-                  Icon(Icons.close, size: 20, color: Colors.grey[400]),
+                  IconButton(
+                    onPressed: onRemove,
+                    icon: Icon(Icons.close, size: 20, color: Colors.grey[400]),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                  ),
                 ],
               ),
               const SizedBox(height: 4),
@@ -194,11 +283,23 @@ class _CartItem extends StatelessWidget {
                     padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
                     child: Row(
                       children: [
-                        const Icon(Icons.remove, size: 16, color: Colors.grey),
-                        const SizedBox(width: 12),
+                        GestureDetector(
+                          onTap: onDecrease,
+                          child: Container(
+                            padding: const EdgeInsets.all(4),
+                            child: Icon(Icons.remove, size: 16, color: quantity > 1 ? Colors.black : Colors.grey),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
                         Text('$quantity', style: const TextStyle(fontWeight: FontWeight.bold)),
-                        const SizedBox(width: 12),
-                        const Icon(Icons.add, size: 16, color: Colors.black),
+                        const SizedBox(width: 8),
+                        GestureDetector(
+                          onTap: onIncrease,
+                          child: Container(
+                            padding: const EdgeInsets.all(4),
+                            child: const Icon(Icons.add, size: 16, color: Colors.black),
+                          ),
+                        ),
                       ],
                     ),
                   ),

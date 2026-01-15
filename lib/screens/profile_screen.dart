@@ -1,23 +1,141 @@
+import 'dart:io' as io;
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:file_picker/file_picker.dart';
+import '../services/api_service.dart';
+import '../login_screen.dart';
+import 'order_list_screen.dart';
 
-class ProfileScreen extends StatelessWidget {
+class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
+
+  @override
+  State<ProfileScreen> createState() => _ProfileScreenState();
+}
+
+class _ProfileScreenState extends State<ProfileScreen> {
+  final ApiService _apiService = ApiService();
+  String _userName = '사용자';
+  String _userEmail = '';
+  String _userImageUrl = 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde';
+  List<dynamic> _recentOrders = [];
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUserInfo();
+    _fetchOrders();
+  }
+
+  // To refresh when screen is appearing (e.g. after navigating back or switching tabs)
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _fetchOrders();
+  }
+
+  Future<void> _loadUserInfo() async {
+    setState(() {
+      _userName = _apiService.userName ?? '사용자';
+      _userEmail = _apiService.userEmail ?? '';
+      _userImageUrl = _apiService.userImageUrl ?? 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde';
+    });
+  }
+
+  Future<void> _handleChangeProfileImage() async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.image,
+        allowMultiple: false,
+        withData: true,
+      );
+
+      if (result != null) {
+        final file = result.files.single;
+        print('File picked: ${file.name}, size: ${file.size}, bytes: ${file.bytes != null}, path: ${file.path}');
+        
+        List<int>? fileBytes = file.bytes;
+        
+        // On Windows/Desktop, bytes might be null even with withData: true
+        if (fileBytes == null && file.path != null) {
+          final ioFile = io.File(file.path!);
+          fileBytes = await ioFile.readAsBytes();
+        }
+
+        if (fileBytes == null) {
+          throw Exception('파일 데이터를 읽을 수 없습니다.');
+        }
+
+        setState(() => _isLoading = true);
+        
+        final uploadResult = await _apiService.uploadProfileImage(
+          fileBytes,
+          file.name,
+        );
+
+        if (mounted) {
+          if (uploadResult['success'] == true) {
+            setState(() {
+              _userImageUrl = _apiService.userImageUrl ?? _userImageUrl;
+              _isLoading = false;
+            });
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('프로필 사진이 변경되었습니다.')),
+            );
+          } else {
+            setState(() => _isLoading = false);
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text(uploadResult['message'] ?? '업로드 실패')),
+            );
+          }
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('오류 발생: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _fetchOrders() async {
+    try {
+      final orders = await _apiService.getOrders();
+      if (mounted) {
+        setState(() {
+          _recentOrders = orders.take(2).toList();
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _handleLogout() async {
+    await _apiService.logout();
+    if (mounted) {
+      Navigator.of(context, rootNavigator: true).pushReplacement(
+        MaterialPageRoute(builder: (context) => const LoginScreen()),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
-        title: const Text('프로필'),
+        title: const Text(
+          'Profile',
+          style: TextStyle(fontWeight: FontWeight.w800),
+        ),
         centerTitle: true,
         backgroundColor: Colors.white,
         elevation: 0,
-        actions: [
-          IconButton(
-            onPressed: () {},
-            icon: const Icon(Icons.settings_outlined, color: Colors.black),
-          ),
-        ],
       ),
       body: SingleChildScrollView(
         child: Column(
@@ -27,44 +145,41 @@ class ProfileScreen extends StatelessWidget {
             Center(
               child: Column(
                 children: [
-                  Stack(
-                    children: [
-                      Container(
-                        width: 100,
-                        height: 100,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          border: Border.all(color: Colors.grey[200]!, width: 1),
-                          image: const DecorationImage(
-                            image: NetworkImage(
-                                'https://lh3.googleusercontent.com/aida-public/AB6AXuB5XozjG5UqAoIiq8pgx3n6xNTqcECxj-ZYATwZjovEAhB6pL9LcfujDdbHMG9krPtFuJoIZgYYlvtPcyhnVpxp_3ZZwIr8zqvyO6GtbPld96UCOzRGKG9G03iBI80oR1tzWcM5F8_yWK8t9a59SLyg_zhvRXgkRPkReZ_FnCok10S3ShvDKYSXoqpf3eoPVkx50jryV8sXRHKbW9lPiPz7fwLA-m65ff4ywZRKYHrTSbDAGKW3F-gQQJNN2-0twUGxGO69WPsccsw'),
-                            fit: BoxFit.cover,
-                          ),
-                        ),
-                      ),
-                      Positioned(
-                        bottom: 0,
-                        right: 0,
-                        child: Container(
-                          padding: const EdgeInsets.all(6),
+                  GestureDetector(
+                    onTap: _handleChangeProfileImage,
+                    child: Stack(
+                      children: [
+                        Container(
+                          width: 100,
+                          height: 100,
                           decoration: BoxDecoration(
-                            color: Colors.black,
                             shape: BoxShape.circle,
-                            border: Border.all(color: Colors.white, width: 2),
-                          ),
-                          child: const Icon(
-                            Icons.edit,
-                            color: Colors.white,
-                            size: 14,
+                            color: Colors.grey[200],
+                            image: DecorationImage(
+                              image: NetworkImage(_userImageUrl),
+                              fit: BoxFit.cover,
+                            ),
                           ),
                         ),
-                      ),
-                    ],
+                        Positioned(
+                          right: 0,
+                          bottom: 0,
+                          child: Container(
+                            padding: const EdgeInsets.all(4),
+                            decoration: const BoxDecoration(
+                              color: Colors.black,
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(Icons.camera_alt, color: Colors.white, size: 16),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                   const SizedBox(height: 16),
-                  const Text(
-                    '김민수',
-                    style: TextStyle(
+                  Text(
+                    _userName,
+                    style: const TextStyle(
                       fontSize: 24,
                       fontWeight: FontWeight.bold,
                       letterSpacing: -0.5,
@@ -72,50 +187,16 @@ class ProfileScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    'minsu.kim@example.com',
+                    _userEmail,
                     style: TextStyle(
                       fontSize: 14,
                       color: Colors.grey[500],
                       fontWeight: FontWeight.w500,
                     ),
                   ),
-                  const SizedBox(height: 16),
-                  OutlinedButton(
-                    onPressed: () {},
-                    style: OutlinedButton.styleFrom(
-                      shape: const StadiumBorder(),
-                      side: BorderSide(color: Colors.grey[200]!),
-                      padding: const EdgeInsets.symmetric(horizontal: 24),
-                    ),
-                    child: const Text('프로필 편집',
-                        style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
-                  ),
                 ],
               ),
             ),
-            const SizedBox(height: 32),
-            // Stats
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: Container(
-                padding: const EdgeInsets.symmetric(vertical: 20),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: Colors.grey[100]!),
-                ),
-                child: Row(
-                  children: const [
-                    _StatItem(label: '포인트', value: '1,250 P'),
-                    _VerticalDivider(),
-                    _StatItem(label: '쿠폰', value: '3'),
-                    _VerticalDivider(),
-                    _StatItem(label: '작성 후기', value: '12'),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 32),
-            const Divider(height: 8, thickness: 8, color: Color(0xFFF9FAFB)),
             const SizedBox(height: 32),
             // Recent Orders
             Padding(
@@ -125,10 +206,18 @@ class ProfileScreen extends StatelessWidget {
                 children: [
                   const Text(
                     '최근 주문 내역',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                   TextButton(
-                    onPressed: () {},
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (context) => const OrderListScreen()),
+                      );
+                    },
                     child: Row(
                       children: const [
                         Text('더보기', style: TextStyle(color: Colors.grey)),
@@ -140,21 +229,27 @@ class ProfileScreen extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 12),
-            const _OrderItem(
-              status: '배송 완료',
-              date: '2023.10.24',
-              title: '프리미엄 가죽 시계 스트랩',
-              orderNumber: '#12345',
-              imageUrl: 'https://lh3.googleusercontent.com/aida-public/AB6AXuBBngJtSon_mnChBs7yIYlB-LEf97DIt1UZTvrbqjTNGpP8EiyJggUnxPLpXVJ3k_hE03RUHmhOpTg6QzXtdo_IaEzWfRwG7COx_9Zgd0sTXaVEBX-phZ6fpF0omjwra_axSxVAw6FJUgomVDB0z8FYZu92bvY0nydc93jhwMB6KsvULuyu4c0-Vfw8awnczY7PGKKepBRHco9Jgblz8gKGWsZDMzkD3ETJO6S3ZiNGx5jMGQ0d25Arcos4pYJvPqE5jmKsCjoF4f8',
-            ),
-            const _OrderItem(
-              status: '배송중',
-              date: '2023.11.02',
-              title: '천연 아로마 디퓨저 세트',
-              orderNumber: '#12348',
-              imageUrl: 'https://lh3.googleusercontent.com/aida-public/AB6AXuB4ThrOSQiAi7QGPIrU0M-Z5yTjpXd26Tb5ve3iKhdAyMsAkfGIYswNUOOEbsNMcu1G024_rR-GatRu80Mf_bg8NLQamWaW4V6fE95SGlPmNB7ICLSROSieLun2Sp8LZMbspZayx7vrLmXgv3Gy7ZnsevFEhNiRXq_8nOrtp3xldJ7lrWxomcdtny2o3VqcjssHml4bCtJms3cEcqncn-Q95ycJra8jSbi1H8J-KsH-j3kHw3k2IA117eONqr4Lv9jnWw-wND4Z5H0',
-              isAccentStatus: true,
-            ),
+            _isLoading
+                ? const Center(child: Padding(
+                    padding: EdgeInsets.all(20.0),
+                    child: CircularProgressIndicator(color: Colors.black),
+                  ))
+                : _recentOrders.isEmpty
+                    ? const Padding(
+                        padding: EdgeInsets.all(20.0),
+                        child: Text('최근 주문 내역이 없습니다.'),
+                      )
+                    : Column(
+                        children: _recentOrders.map((order) {
+                          return _OrderItem(
+                            status: order['status'] ?? '주문완료',
+                            date: order['created_at'].toString().split('T')[0],
+                            title: '주문 #${order['id']}',
+                            orderNumber: order['id'].toString(),
+                            imageUrl: 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd',
+                          );
+                        }).toList(),
+                      ),
             const SizedBox(height: 32),
             const Divider(height: 8, thickness: 8, color: Color(0xFFF9FAFB)),
             const SizedBox(height: 32),
@@ -172,14 +267,13 @@ class ProfileScreen extends StatelessWidget {
             const SizedBox(height: 8),
             const _SettingTile(icon: Icons.notifications_none, title: '알림 설정'),
             const _SettingTile(icon: Icons.location_on_outlined, title: '배송지 관리'),
-            const _StattingTile(icon: Icons.credit_card, title: '결제 수단'),
             const _SettingTile(icon: Icons.help_outline, title: '고객센터'),
             const SizedBox(height: 32),
             // Logout
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: OutlinedButton(
-                onPressed: () {},
+                onPressed: _handleLogout,
                 style: OutlinedButton.styleFrom(
                   minimumSize: const Size.fromHeight(56),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -197,7 +291,7 @@ class ProfileScreen extends StatelessWidget {
             ),
             const SizedBox(height: 24),
             const Text(
-              'App Version 2.4.0',
+              'App Version 1.0.0',
               style: TextStyle(fontSize: 12, color: Colors.grey, fontFamily: 'monospace'),
             ),
             const SizedBox(height: 100),
@@ -332,14 +426,4 @@ class _SettingTile extends StatelessWidget {
   }
 }
 
-class _StattingTile extends StatelessWidget {
-  final IconData icon;
-  final String title;
-
-  const _StattingTile({required this.icon, required this.title});
-
-  @override
-  Widget build(BuildContext context) {
-    return _SettingTile(icon: icon, title: title);
-  }
-}
+// End of ProfileScreen.dart

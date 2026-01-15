@@ -1,17 +1,123 @@
 import 'package:flutter/material.dart';
-import '../theme.dart';
+import '../services/api_service.dart';
+import 'menu_detail_screen.dart';
+import 'cart_screen.dart';
 
-class HomeScreen extends StatelessWidget {
+class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
+
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  final ApiService _apiService = ApiService();
+  List<dynamic> _categories = [];
+  List<dynamic> _products = [];
+  bool _isLoading = true;
+  int? _selectedCategoryId;
+  int _cartItemCount = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchData();
+    _fetchCartCount();
+  }
+
+  Future<void> _fetchData() async {
+    setState(() => _isLoading = true);
+    try {
+      final categories = await _apiService.getCategories();
+      final products = await _apiService.getProducts();
+      setState(() {
+        _categories = categories;
+        _products = products;
+        _isLoading = false;
+      });
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to load data: $e')),
+        );
+      }
+      setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _fetchCartCount() async {
+    try {
+      final result = await _apiService.getCart();
+      final items = result['items'] as List<dynamic>?;
+      if (mounted) {
+        setState(() {
+          _cartItemCount = items?.length ?? 0;
+        });
+      }
+    } catch (e) {
+      // Ignore cart fetch errors (user might not be logged in)
+    }
+  }
+
+  Future<void> _fetchProductsByCategory(int? categoryId) async {
+    setState(() {
+      _selectedCategoryId = categoryId;
+      _isLoading = true;
+    });
+    try {
+      final products = await _apiService.getProducts(categoryId: categoryId);
+      setState(() {
+        _products = products;
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _handleAddToCart(int productId, String productName) async {
+    try {
+      final result = await _apiService.addToCart(productId, 1, {});
+      if (mounted) {
+        if (result['success'] == true) {
+          _fetchCartCount(); // Update cart badge
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('$productName added to cart!'),
+              backgroundColor: Colors.green,
+              duration: const Duration(seconds: 1),
+            ),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(result['message'] ?? 'Please login first'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Please login to add items to cart'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.white,
       appBar: PreferredSize(
-        preferredSize: const Size.fromHeight(80),
+        preferredSize: const Size.fromHeight(70),
         child: SafeArea(
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -20,65 +126,76 @@ class HomeScreen extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
-                      '다시 오신 것을 환영합니다',
+                      'WELCOME BACK',
                       style: TextStyle(
-                        fontSize: 12,
+                        fontSize: 11,
                         fontWeight: FontWeight.w600,
-                        color: Colors.grey[400],
-                        letterSpacing: 1.2,
+                        color: Colors.black,
+                        letterSpacing: 1.5,
                       ),
                     ),
+                    const SizedBox(height: 2),
                     const Text(
-                      '버거 조인트',
+                      'Burger Joint',
                       style: TextStyle(
-                        fontSize: 24,
+                        fontSize: 22,
                         fontWeight: FontWeight.bold,
                         letterSpacing: -0.5,
+                        color: Colors.black,
                       ),
                     ),
                   ],
                 ),
                 Row(
                   children: [
-                    IconButton(
-                      onPressed: () {},
-                      icon: const Icon(Icons.search, size: 28),
-                    ),
-                    Stack(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: const BoxDecoration(
-                            color: Colors.black,
-                            shape: BoxShape.circle,
+                    const Icon(Icons.search, size: 26, color: Colors.black),
+                    const SizedBox(width: 16),
+                    GestureDetector(
+                      onTap: () async {
+                        await Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const CartScreen(),
                           ),
-                          child: const Icon(
-                            Icons.shopping_cart_outlined,
-                            color: Colors.white,
-                            size: 22,
-                          ),
-                        ),
-                        Positioned(
-                          right: 0,
-                          top: 0,
-                          child: Container(
-                            padding: const EdgeInsets.all(4),
-                            decoration: BoxDecoration(
-                              color: Colors.red,
+                        );
+                        _fetchCartCount(); // Refresh count when coming back from cart
+                      },
+                      child: Stack(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: const BoxDecoration(
+                              color: Colors.black,
                               shape: BoxShape.circle,
-                              border: Border.all(color: Colors.white, width: 2),
                             ),
-                            child: const Text(
-                              '2',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 8,
-                                fontWeight: FontWeight.bold,
+                            child: const Icon(
+                              Icons.shopping_cart_outlined,
+                              color: Colors.white,
+                              size: 20,
+                            ),
+                          ),
+                          if (_cartItemCount > 0)
+                            Positioned(
+                              right: 0,
+                              top: 0,
+                              child: Container(
+                                padding: const EdgeInsets.all(4),
+                                decoration: const BoxDecoration(
+                                  color: Colors.red,
+                                  shape: BoxShape.circle,
+                                ),
+                                child: Text(
+                                  '$_cartItemCount',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
                               ),
                             ),
-                          ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ],
                 ),
@@ -87,178 +204,266 @@ class HomeScreen extends StatelessWidget {
           ),
         ),
       ),
-      body: SingleChildScrollView(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const SizedBox(height: 20),
-            // Banner
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: Container(
-                height: 240,
-                width: double.infinity,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(30),
-                  image: const DecorationImage(
-                    image: NetworkImage(
-                        'https://lh3.googleusercontent.com/aida-public/AB6AXuA9_KeNUf94FVEaODh0sH-6THeiVidxuZ3I8Uf1bgABRcWrsNzFO-_hfN5t3GYuF5O9xHq5B9NCIovc6CBMx46WJpbw4vZFS6Dgow9ZZ5NuYv_b0FV9EL0y3UBjuvx_1yvJ6fTNfzfmfn3b5kynwY4Rjgb9Hi6QHd4rn8yzw4YwbaoD-EpjcyFHxOcvjKMOhPMvQpYGkTxZ0qnohqcVM76bkZW7fVenfGD96YseHyl1XGy1t62PIVSVGMFkQ-E3eSNaqoAMVFT7IwM'),
-                    fit: BoxFit.cover,
-                  ),
-                ),
-                child: Container(
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(30),
-                    gradient: LinearGradient(
-                      begin: Alignment.bottomCenter,
-                      end: Alignment.topCenter,
-                      colors: [
-                        Colors.black.withOpacity(0.7),
-                        Colors.transparent,
-                      ],
-                    ),
-                  ),
-                  padding: const EdgeInsets.all(24),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 4),
+      body: _isLoading && _categories.isEmpty
+          ? const Center(child: CircularProgressIndicator(color: Colors.black))
+          : RefreshIndicator(
+              onRefresh: _fetchData,
+              color: Colors.black,
+              child: SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const SizedBox(height: 16),
+                    // Banner
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      child: Container(
+                        height: 200,
+                        width: double.infinity,
                         decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(20),
+                          borderRadius: BorderRadius.circular(24),
+                          image: const DecorationImage(
+                            image: NetworkImage(
+                                'https://images.unsplash.com/photo-1550547660-d9450f859349'),
+                            fit: BoxFit.cover,
+                          ),
                         ),
-                        child: const Text(
-                          '한정 할인',
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.black,
+                        child: Container(
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(24),
+                            gradient: LinearGradient(
+                              begin: Alignment.centerLeft,
+                              end: Alignment.centerRight,
+                              colors: [
+                                Colors.black.withOpacity(0.7),
+                                Colors.transparent,
+                              ],
+                            ),
+                          ),
+                          padding: const EdgeInsets.all(20),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 12, vertical: 6),
+                                decoration: BoxDecoration(
+                                  color: Colors.black,
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                                child: const Text(
+                                  'LIMITED OFFER',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.white,
+                                    letterSpacing: 0.5,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                              const Text(
+                                'Special Deal:\n20% Off Sets',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 24,
+                                  fontWeight: FontWeight.bold,
+                                  height: 1.2,
+                                  fontStyle: FontStyle.italic,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                'Get the Classic Combo for less',
+                                style: TextStyle(
+                                  color: Colors.white.withOpacity(0.8),
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       ),
-                      const SizedBox(height: 12),
-                      const Text(
-                        '스페셜 딜:\n세트 메뉴 20% 할인',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 28,
-                          fontWeight: FontWeight.bold,
-                          height: 1.1,
-                        ),
+                    ),
+                    const SizedBox(height: 24),
+                    // Categories
+                    SizedBox(
+                      height: 44,
+                      child: ListView.builder(
+                        scrollDirection: Axis.horizontal,
+                        padding: const EdgeInsets.symmetric(horizontal: 20),
+                        itemCount: _categories.length + 1,
+                        itemBuilder: (context, index) {
+                          if (index == 0) {
+                            return _CategoryChip(
+                              icon: Icons.star,
+                              title: 'All',
+                              isActive: _selectedCategoryId == null,
+                              onTap: () => _fetchProductsByCategory(null),
+                            );
+                          }
+                          final category = _categories[index - 1];
+                          return _CategoryChip(
+                            icon: Icons.lunch_dining,
+                            title: category['name'],
+                            isActive: _selectedCategoryId == category['id'],
+                            onTap: () => _fetchProductsByCategory(category['id']),
+                          );
+                        },
                       ),
-                      const SizedBox(height: 4),
-                      const Text(
-                        '클래식 콤보를 더 저렴한 가격에 만나보세요',
-                        style: TextStyle(
-                          color: Colors.white70,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w500,
-                        ),
+                    ),
+                    const SizedBox(height: 28),
+                    // Popular Menu Header
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            _selectedCategoryId == null ? 'Popular Menu' : 'Menu List',
+                            style: const TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: -0.3,
+                            ),
+                          ),
+                          Row(
+                            children: [
+                              Text(
+                                'See All',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w500,
+                                  color: Colors.grey[600],
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                              Icon(
+                                Icons.arrow_forward,
+                                size: 16,
+                                color: Colors.grey[600],
+                              ),
+                            ],
+                          ),
+                        ],
                       ),
-                    ],
-                  ),
+                    ),
+                    const SizedBox(height: 16),
+                    // Menu Grid
+                    _isLoading
+                        ? const Center(
+                            child: Padding(
+                              padding: EdgeInsets.all(40.0),
+                              child: CircularProgressIndicator(color: Colors.black),
+                            ),
+                          )
+                        : Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 20),
+                            child: _products.isEmpty
+                                ? const Center(
+                                    child: Padding(
+                                      padding: EdgeInsets.all(40),
+                                      child: Text('No products in this category'),
+                                    ),
+                                  )
+                                : GridView.builder(
+                                    shrinkWrap: true,
+                                    physics: const NeverScrollableScrollPhysics(),
+                                    gridDelegate:
+                                        const SliverGridDelegateWithFixedCrossAxisCount(
+                                      crossAxisCount: 2,
+                                      mainAxisSpacing: 20,
+                                      crossAxisSpacing: 16,
+                                      childAspectRatio: 0.68,
+                                    ),
+                                    itemCount: _products.length,
+                                    itemBuilder: (context, index) {
+                                      final product = _products[index];
+                                      return GestureDetector(
+                                        onTap: () async {
+                                          final result = await Navigator.push(
+                                            context,
+                                            MaterialPageRoute(
+                                              builder: (context) =>
+                                                  MenuDetailScreen(product: product),
+                                            ),
+                                          );
+                                          if (result == true) {
+                                            _fetchCartCount();
+                                          }
+                                        },
+                                        child: _MenuCard(
+                                          title: product['name'],
+                                          subtitle: product['description'] ?? '',
+                                          price: product['price'].toString(),
+                                          imageUrl: product['image_url'] ??
+                                              'https://images.unsplash.com/photo-1568901346375-23c9450c58cd',
+                                          isVegan: product['is_vegan'] ?? false,
+                                          onAddToCart: () => _handleAddToCart(
+                                            product['id'],
+                                            product['name'],
+                                          ),
+                                        ),
+                                      );
+                                    },
+                                  ),
+                          ),
+                    const SizedBox(height: 100),
+                  ],
                 ),
               ),
             ),
-            const SizedBox(height: 32),
-            // Categories
-            SizedBox(
-              height: 44,
-              child: ListView(
-                scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                children: [
-                  _CategoryItem(
-                      icon: Icons.star, title: '전체', isActive: true),
-                  _CategoryItem(icon: Icons.lunch_dining, title: '소고기'),
-                  _CategoryItem(icon: Icons.egg_alt, title: '치킨'),
-                  _CategoryItem(icon: Icons.eco, title: '비건'),
-                  _CategoryItem(icon: Icons.fastfood, title: '사이드'),
-                ],
+    );
+  }
+}
+
+class _CategoryChip extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final bool isActive;
+  final VoidCallback onTap;
+
+  const _CategoryChip({
+    required this.icon,
+    required this.title,
+    required this.onTap,
+    this.isActive = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        margin: const EdgeInsets.only(right: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        decoration: BoxDecoration(
+          color: isActive ? Colors.black : Colors.white,
+          borderRadius: BorderRadius.circular(22),
+          border: Border.all(
+            color: isActive ? Colors.black : Colors.grey[300]!,
+            width: 1,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              size: 18,
+              color: isActive ? Colors.white : Colors.black,
+            ),
+            const SizedBox(width: 6),
+            Text(
+              title,
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: isActive ? Colors.white : Colors.black,
               ),
             ),
-            const SizedBox(height: 32),
-            // Popular Menu Header
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text(
-                    '인기 메뉴',
-                    style: TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: -0.5,
-                    ),
-                  ),
-                  TextButton(
-                    onPressed: () {},
-                    child: Row(
-                      children: const [
-                        Text(
-                          '전체보기',
-                          style: TextStyle(
-                            color: Colors.grey,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        Icon(Icons.arrow_forward,
-                            size: 16, color: Colors.grey),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 20),
-            // Popular Menu Grid
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: GridView.count(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                crossAxisCount: 2,
-                mainAxisSpacing: 24,
-                crossAxisSpacing: 16,
-                childAspectRatio: 0.75,
-                children: const [
-                  _MenuItem(
-                    title: '클래식 치즈버거',
-                    subtitle: '소고기 패티, 체다 치즈, 양상추, 토마토',
-                    price: '₩8,900',
-                    imageUrl:
-                        'https://lh3.googleusercontent.com/aida-public/AB6AXuDm6mIx0fs99Oua6sn3tJGFTtRKlkEO4-jr0mJQzRr5vXc3lWzMhaaS8R-6ic0tczSQX-znCUl1X4QG7HGMsYIJ-G3rXZoqAry9L5vfx-DdqZTKWFem1A4Yi8ZZJ3X27DwBUHxcv8J9fxAUSyjM7vhGEM8oVSNYZDH5WpZQnkbcVdmi70gxIQ8F-0OGIksIM6uGB87NQP2I6Y_7rkpKp3ZTHB4JoDB0uaPTCm5audamNYXgJka7QVag_g1083b7NmKkWViDYh7nL04',
-                  ),
-                  _MenuItem(
-                    title: '스파이시 치킨 딜럭스',
-                    subtitle: '바삭한 치킨, 스파이시 마요',
-                    price: '₩9,500',
-                    imageUrl:
-                        'https://lh3.googleusercontent.com/aida-public/AB6AXuCGyxLIPl-zU2gr5gKY6bc0gvOwrUHKLbrH3APCTuEjAxIV4c4NxNHGdgaAvqKTNUf4bLOFmu3dsy61lzCTelB9s4owYLBZXaK4CZevOQWm29pM1WKUwRHyNwTjlEqKf2rY3xP_K-IAJ2MhLBrqMCl7aEZZKbkVeGF26dOcfHEOVl9n7E4kinkHHflLJ-IILGGDtMepQ-X3rw76-VuFCQ89pYfHjQHvSIXe0aJysJEjny5-GhLpfZ-iG12OzL1JgEWgOHqon7x1udg',
-                  ),
-                  _MenuItem(
-                    title: '머쉬룸 스위스',
-                    subtitle: '볶은 버섯, 스위스 치즈',
-                    price: '₩10,200',
-                    imageUrl:
-                        'https://lh3.googleusercontent.com/aida-public/AB6AXuD9iZ7i1tGCiVAryLZ6KtowIyzi9ybb0kSQLf3S4FOxWw8CzzGRerQEm8frt3kJR6em3Wm07PsIkQJ9oJHxhqEz06YDAoN5oudNv3jSqmsubDbjZxxONQIPOpIxyh0OHzOK4gmlSS4qDHGEIcV4ZMAh91dtl4Dj3a8aetuC4AVdBUME-TY3hRhJZJdV_38npJhQsuXq4-tnJxWj_ygTe-uaLGGReCO5t5p9zdxWcam3DE6hQv1aD_PYQZDEa1OcudUpkMtJTGNwnPs',
-                  ),
-                  _MenuItem(
-                    title: '비건 딜라이트',
-                    subtitle: '식물성 패티, 아보카도',
-                    price: '₩11,000',
-                    imageUrl:
-                        'https://lh3.googleusercontent.com/aida-public/AB6AXuCSypEu_NWOEFD8wl9VLxM-pOkkkpmbaMBUc0JsE9y0LEck-r6fuZHzkHzHhX3RVqc7FcphSYC2Ez0HK97OnNkam_qQyAe1rJePsHTgAWvgP3HyJb0fA0NkNCFgySx_nYCgBqavxD9qsVax6k_J1N-u5hC1m90Cyh_5O8qP061BS4Q9vmOxoxc3G2OR5cJ20rZyqELUu38h9iC5Q8WBi3byZCb4tr6zMXO7LXiCnfucg_hLa2DzEwpnaEEhQNkWnFJwLgWVNn4QFzI',
-                    isVegan: true,
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 40),
           ],
         ),
       ),
@@ -266,73 +471,21 @@ class HomeScreen extends StatelessWidget {
   }
 }
 
-class _CategoryItem extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  final bool isActive;
-
-  const _CategoryItem({
-    required this.icon,
-    required this.title,
-    this.isActive = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(right: 12),
-      padding: const EdgeInsets.symmetric(horizontal: 20),
-      decoration: BoxDecoration(
-        color: isActive ? Colors.black : Colors.white,
-        borderRadius: BorderRadius.circular(25),
-        border: Border.all(
-          color: isActive ? Colors.black : Colors.grey[200]!,
-        ),
-        boxShadow: isActive
-            ? [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.1),
-                  blurRadius: 10,
-                  offset: const Offset(0, 4),
-                )
-              ]
-            : null,
-      ),
-      child: Row(
-        children: [
-          Icon(
-            icon,
-            size: 20,
-            color: isActive ? Colors.white : Colors.black,
-          ),
-          const SizedBox(width: 8),
-          Text(
-            title,
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: isActive ? FontWeight.bold : FontWeight.w500,
-              color: isActive ? Colors.white : Colors.black,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _MenuItem extends StatelessWidget {
+class _MenuCard extends StatelessWidget {
   final String title;
   final String subtitle;
   final String price;
   final String imageUrl;
   final bool isVegan;
+  final VoidCallback? onAddToCart;
 
-  const _MenuItem({
+  const _MenuCard({
     required this.title,
     required this.subtitle,
     required this.price,
     required this.imageUrl,
     this.isVegan = false,
+    this.onAddToCart,
   });
 
   @override
@@ -340,61 +493,69 @@ class _MenuItem extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Stack(
-          children: [
-            Container(
-              aspectRatio: 1,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(20),
-                image: DecorationImage(
-                  image: NetworkImage(imageUrl),
-                  fit: BoxFit.cover,
+        Expanded(
+          child: Stack(
+            children: [
+              Container(
+                width: double.infinity,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(16),
+                  color: Colors.grey[100],
+                  image: DecorationImage(
+                    image: NetworkImage(imageUrl),
+                    fit: BoxFit.cover,
+                  ),
                 ),
-                border: Border.all(color: Colors.grey[100]!),
               ),
-            ),
-            Positioned(
-              top: 12,
-              right: 12,
-              child: isVegan
-                  ? Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.9),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.green[100]!),
-                      ),
-                      child: const Text(
-                        'Vegan',
-                        style: TextStyle(
-                          color: Colors.green,
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    )
-                  : Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: const BoxDecoration(
+              // Favorite button
+              Positioned(
+                top: 10,
+                right: 10,
+                child: Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: Colors.black,
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.favorite,
+                    size: 16,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+              // Vegan badge
+              if (isVegan)
+                Positioned(
+                  bottom: 10,
+                  right: 10,
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.green,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Text(
+                      'VEGAN',
+                      style: TextStyle(
                         color: Colors.white,
-                        shape: BoxShape.circle,
-                      ),
-                      child: Icon(
-                        Icons.favorite_border,
-                        size: 18,
-                        color: Colors.grey[400],
+                        fontSize: 9,
+                        fontWeight: FontWeight.bold,
                       ),
                     ),
-            ),
-          ],
+                  ),
+                ),
+            ],
+          ),
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 10),
         Text(
           title,
           style: const TextStyle(
             fontSize: 15,
             fontWeight: FontWeight.bold,
+            color: Colors.black,
           ),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
@@ -403,34 +564,37 @@ class _MenuItem extends StatelessWidget {
         Text(
           subtitle,
           style: TextStyle(
-            fontSize: 12,
+            fontSize: 11,
             color: Colors.grey[500],
           ),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 6),
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Text(
-              price,
+              '₩$price',
               style: const TextStyle(
-                fontSize: 18,
+                fontSize: 16,
                 fontWeight: FontWeight.bold,
+                color: Colors.black,
               ),
             ),
-            Container(
-              width: 36,
-              height: 36,
-              decoration: const BoxDecoration(
-                color: Colors.black,
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(
-                Icons.add,
-                color: Colors.white,
-                size: 20,
+            GestureDetector(
+              onTap: onAddToCart,
+              child: Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: Colors.black,
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.add,
+                  size: 18,
+                  color: Colors.white,
+                ),
               ),
             ),
           ],

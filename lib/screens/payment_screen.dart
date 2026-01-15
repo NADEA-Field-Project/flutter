@@ -16,6 +16,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
   final TextEditingController _phoneController = TextEditingController(text: '010-1234-5678');
   final TextEditingController _addressController = TextEditingController(text: '서울시 강남구 테헤란로 123');
   List<dynamic> _cartItems = [];
+  Map<String, dynamic>? _defaultPaymentMethod;
   bool _isLoading = false;
   bool _isLoadingCart = true;
 
@@ -23,6 +24,28 @@ class _PaymentScreenState extends State<PaymentScreen> {
   void initState() {
     super.initState();
     _fetchCartItems();
+    _fetchDefaultAddress();
+    _fetchDefaultPaymentMethod();
+  }
+
+  Future<void> _fetchDefaultAddress() async {
+    try {
+      final addresses = await _apiService.getAddresses();
+      final defaultAddr = addresses.firstWhere(
+        (addr) => addr['is_default'] == 1 || addr['is_default'] == true,
+        orElse: () => null,
+      );
+
+      if (defaultAddr != null && mounted) {
+        setState(() {
+          _nameController.text = defaultAddr['receiver_name'];
+          _phoneController.text = defaultAddr['phone'];
+          _addressController.text = '${defaultAddr['address_line1']} ${defaultAddr['address_line2'] ?? ''}'.trim();
+        });
+      }
+    } catch (e) {
+      print('Error fetching default address: $e');
+    }
   }
 
   Future<void> _fetchCartItems() async {
@@ -36,6 +59,130 @@ class _PaymentScreenState extends State<PaymentScreen> {
       }
     } catch (e) {
       setState(() => _isLoadingCart = false);
+    }
+  }
+
+  Future<void> _fetchDefaultPaymentMethod() async {
+    try {
+      final methods = await _apiService.getPaymentMethods();
+      final defaultMethod = methods.firstWhere(
+        (m) => m['is_default'] == 1 || m['is_default'] == true,
+        orElse: () => null,
+      );
+      if (mounted) {
+        setState(() {
+          _defaultPaymentMethod = defaultMethod;
+        });
+      }
+    } catch (e) {
+      print('Error fetching default payment method: $e');
+    }
+  }
+
+  void _showAddressSelectionBottomSheet() async {
+    try {
+      final addresses = await _apiService.getAddresses();
+      if (!mounted) return;
+
+      showModalBottomSheet(
+        context: context,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        builder: (context) => Container(
+          padding: const EdgeInsets.symmetric(vertical: 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('배송지 선택', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 12),
+              if (addresses.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.all(20.0),
+                  child: Text('등록된 배송지가 없습니다.'),
+                )
+              else
+                Flexible(
+                  child: ListView.builder(
+                    shrinkWrap: true,
+                    itemCount: addresses.length,
+                    itemBuilder: (context, index) {
+                      final addr = addresses[index];
+                      return ListTile(
+                        title: Text(addr['receiver_name']),
+                        subtitle: Text('${addr['address_line1']} ${addr['address_line2'] ?? ''}'),
+                        trailing: addr['is_default'] == 1 ? const Icon(Icons.check_circle, color: Colors.black) : null,
+                        onTap: () {
+                          setState(() {
+                            _nameController.text = addr['receiver_name'];
+                            _phoneController.text = addr['phone'];
+                            _addressController.text = '${addr['address_line1']} ${addr['address_line2'] ?? ''}'.trim();
+                          });
+                          Navigator.pop(context);
+                        },
+                      );
+                    },
+                  ),
+                ),
+            ],
+          ),
+        ),
+      );
+    } catch (e) {
+      print('Error loading addresses: $e');
+    }
+  }
+
+  void _showCardSelectionBottomSheet() async {
+    try {
+      final methods = await _apiService.getPaymentMethods();
+      if (!mounted) return;
+
+      showModalBottomSheet(
+        context: context,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        builder: (context) => Container(
+          padding: const EdgeInsets.symmetric(vertical: 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('결제 수단 선택', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 12),
+              if (methods.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.all(20.0),
+                  child: Text('등록된 결제 수단이 없습니다.'),
+                )
+              else
+                Flexible(
+                  child: ListView.builder(
+                    shrinkWrap: true,
+                    itemCount: methods.length,
+                    itemBuilder: (context, index) {
+                      final item = methods[index];
+                      return ListTile(
+                        leading: const Icon(Icons.credit_card),
+                        title: Text(item['card_name']),
+                        subtitle: Text(item['card_number']),
+                        trailing: item['is_default'] == 1 ? const Icon(Icons.check_circle, color: Colors.black) : null,
+                        onTap: () {
+                          setState(() {
+                            _defaultPaymentMethod = item;
+                          });
+                          Navigator.pop(context);
+                        },
+                      );
+                    },
+                  ),
+                ),
+            ],
+          ),
+        ),
+      );
+    } catch (e) {
+      print('Error loading cards: $e');
     }
   }
 
@@ -118,9 +265,18 @@ class _PaymentScreenState extends State<PaymentScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Delivery Info Section
-            const Padding(
-              padding: EdgeInsets.fromLTRB(20, 16, 20, 12),
-              child: Text('배송지 정보', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('배송지 정보', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  TextButton(
+                    onPressed: _showAddressSelectionBottomSheet,
+                    child: Text('배송지 변경', style: TextStyle(color: Colors.grey[600], fontWeight: FontWeight.w500)),
+                  ),
+                ],
+              ),
             ),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -149,7 +305,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
                 children: [
                   const Text('결제 수단', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                   TextButton(
-                    onPressed: () {},
+                    onPressed: _showCardSelectionBottomSheet,
                     child: Text('카드 변경', style: TextStyle(color: Colors.grey[600], fontWeight: FontWeight.w500)),
                   ),
                 ],
@@ -184,12 +340,17 @@ class _PaymentScreenState extends State<PaymentScreen> {
                         Icon(Icons.contactless, color: Colors.white.withOpacity(0.6)),
                       ],
                     ),
-                    const Text('•••• •••• •••• 8892', style: TextStyle(color: Colors.white, fontSize: 18, letterSpacing: 2, fontWeight: FontWeight.w500)),
+                    Text(
+                      _defaultPaymentMethod != null 
+                        ? _defaultPaymentMethod!['card_number'] 
+                        : '•••• •••• •••• 8892', 
+                      style: const TextStyle(color: Colors.white, fontSize: 18, letterSpacing: 2, fontWeight: FontWeight.w500)
+                    ),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         _CardInfo(label: 'CARD HOLDER', value: _nameController.text.toUpperCase()),
-                        const _CardInfo(label: 'EXPIRES', value: '12/28'),
+                        _CardInfo(label: 'EXPIRES', value: _defaultPaymentMethod != null ? 'PERMANENT' : '12/28'),
                       ],
                     ),
                   ],

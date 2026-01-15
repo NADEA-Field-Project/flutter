@@ -5,6 +5,8 @@ import 'package:file_picker/file_picker.dart';
 import '../services/api_service.dart';
 import '../login_screen.dart';
 import 'order_list_screen.dart';
+import 'address_screen.dart';
+import 'payment_method_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -265,7 +267,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
             ),
             const SizedBox(height: 8),
-            const _SettingTile(icon: Icons.notifications_none, title: '알림 설정'),
+            const _SettingTile(icon: Icons.credit_card_outlined, title: '결제 수단'),
             const _SettingTile(icon: Icons.location_on_outlined, title: '배송지 관리'),
             const _SettingTile(icon: Icons.help_outline, title: '고객센터'),
             const SizedBox(height: 32),
@@ -421,7 +423,19 @@ class _SettingTile extends StatelessWidget {
       ),
       title: Text(title, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500)),
       trailing: const Icon(Icons.chevron_right, color: Colors.grey, size: 20),
-      onTap: () {},
+      onTap: () {
+        if (title == '배송지 관리') {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const AddressScreen()),
+          );
+        } else if (title == '결제 수단') {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const PaymentMethodScreen()),
+          );
+        }
+      },
     );
   }
 }

@@ -1,11 +1,24 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:path/path.dart' as p;
 
 class ApiService {
-  static const String baseUrl = 'http://localhost:3000/api/v1';
+  static String get baseUrl {
+    if (Platform.isAndroid) {
+      return 'http://10.0.2.2:3000/api/v1';
+    }
+    return 'http://localhost:3000/api/v1';
+  }
+  
+  static String get hostUrl {
+    if (Platform.isAndroid) {
+      return 'http://10.0.2.2:3000';
+    }
+    return 'http://localhost:3000';
+  }
   
   static final ApiService _instance = ApiService._internal();
   factory ApiService() => _instance;
@@ -31,7 +44,7 @@ class ApiService {
   String? get userImageUrl {
     if (_userImageUrl == null) return null;
     if (_userImageUrl!.startsWith('http')) return _userImageUrl;
-    return 'http://localhost:3000$_userImageUrl';
+    return '$hostUrl$_userImageUrl';
   }
   bool get isLoggedIn => _token != null;
 
@@ -242,6 +255,102 @@ class ApiService {
       Uri.parse('$baseUrl/carts/reorder'),
       headers: await _getHeaders(),
       body: jsonEncode({'orderId': orderId}),
+    );
+    return jsonDecode(response.body);
+  }
+
+  // Addresses
+  Future<List<dynamic>> getAddresses() async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/addresses'),
+      headers: await _getHeaders(),
+    );
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body);
+    }
+    return [];
+  }
+
+  Future<Map<String, dynamic>> addAddress({
+    required String receiverName,
+    required String phone,
+    required String addressLine1,
+    String? addressLine2,
+    bool isDefault = false,
+  }) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/addresses'),
+      headers: await _getHeaders(),
+      body: jsonEncode({
+        'receiver_name': receiverName,
+        'phone': phone,
+        'address_line1': addressLine1,
+        'address_line2': addressLine2,
+        'is_default': isDefault,
+      }),
+    );
+    return jsonDecode(response.body);
+  }
+
+  Future<Map<String, dynamic>> deleteAddress(int id) async {
+    final response = await http.delete(
+      Uri.parse('$baseUrl/addresses/$id'),
+      headers: await _getHeaders(),
+    );
+    return jsonDecode(response.body);
+  }
+
+  Future<Map<String, dynamic>> setDefaultAddress(int id) async {
+    final response = await http.patch(
+      Uri.parse('$baseUrl/addresses/$id/default'),
+      headers: await _getHeaders(),
+    );
+    return jsonDecode(response.body);
+  }
+
+  // Payment Methods
+  Future<List<dynamic>> getPaymentMethods() async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/payment-methods'),
+      headers: await _getHeaders(),
+    );
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body);
+    }
+    return [];
+  }
+
+  Future<Map<String, dynamic>> addPaymentMethod({
+    required String cardName,
+    required String cardNumber,
+    required String cardType,
+    bool isDefault = false,
+  }) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/payment-methods'),
+      headers: await _getHeaders(),
+      body: jsonEncode({
+        'card_name': cardName,
+        'card_number': cardNumber,
+        'card_type': cardType,
+        'is_default': isDefault,
+      }),
+    );
+    return jsonDecode(response.body);
+  }
+
+  Future<Map<String, dynamic>> deletePaymentMethod(int id) async {
+    final response = await http.delete(
+      Uri.parse('$baseUrl/payment-methods/$id'),
+      headers: await _getHeaders(),
+    );
+    return jsonDecode(response.body);
+  }
+
+  Future<Map<String, dynamic>> setDefaultPaymentMethod(int id) async {
+    final response = await http.patch(
+      Uri.parse('$baseUrl/payment-methods/$id/default'),
+      headers: await _getHeaders(),
     );
     return jsonDecode(response.body);
   }

@@ -32,16 +32,20 @@ class _MainNavigationState extends State<MainNavigation> {
       backgroundColor: Colors.white,
       body: Stack(
         children: [
-          _screens[_selectedIndex],
+          IndexedStack(
+            index: _selectedIndex,
+            children: _screens,
+          ),
           Positioned(
-            left: 24,
-            right: 24,
-            bottom: 5,
+            left: 20,
+            right: 20,
+            bottom: 20,
             child: Container(
-              height: 60,
+              height: 70,
+              padding: const EdgeInsets.symmetric(horizontal: 10),
               decoration: BoxDecoration(
                 color: Colors.black,
-                borderRadius: BorderRadius.circular(30),
+                borderRadius: BorderRadius.circular(35),
                 boxShadow: [
                   BoxShadow(
                     color: Colors.black.withOpacity(0.3),
@@ -50,13 +54,35 @@ class _MainNavigationState extends State<MainNavigation> {
                   ),
                 ],
               ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              child: Stack(
+                alignment: Alignment.center,
                 children: [
-                  _buildNavItem(0, Icons.home_rounded, Icons.home_outlined),
-                  _buildNavItem(1, Icons.favorite_rounded, Icons.favorite_border_rounded),
-                  _buildNavItem(2, Icons.receipt_long_rounded, Icons.receipt_long_outlined),
-                  _buildNavItem(3, Icons.person_rounded, Icons.person_outline_rounded),
+                  // Sliding background indicator
+                  AnimatedAlign(
+                    duration: const Duration(milliseconds: 400),
+                    curve: Curves.elasticOut,
+                    alignment: Alignment(
+                      -1.0 + (_selectedIndex * (2.0 / (_screens.length - 1))),
+                      0,
+                    ),
+                    child: Container(
+                      width: 50,
+                      height: 50,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.15),
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                  ),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceAround,
+                    children: [
+                      _buildNavItem(0, 'Home', Icons.home_rounded, Icons.home_outlined),
+                      _buildNavItem(1, 'Favs', Icons.favorite_rounded, Icons.favorite_border_rounded),
+                      _buildNavItem(2, 'Orders', Icons.receipt_long_rounded, Icons.receipt_long_outlined),
+                      _buildNavItem(3, 'Profile', Icons.person_rounded, Icons.person_outline_rounded),
+                    ],
+                  ),
                 ],
               ),
             ),
@@ -66,22 +92,46 @@ class _MainNavigationState extends State<MainNavigation> {
     );
   }
 
-  Widget _buildNavItem(int index, IconData activeIcon, IconData inactiveIcon) {
+  Widget _buildNavItem(int index, String label, IconData activeIcon, IconData inactiveIcon) {
     final bool isSelected = _selectedIndex == index;
     return GestureDetector(
       onTap: () => _onItemTapped(index),
       behavior: HitTestBehavior.opaque,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: isSelected ? Colors.white : Colors.transparent,
-          shape: BoxShape.circle,
-        ),
-        child: Icon(
-          isSelected ? activeIcon : inactiveIcon,
-          color: isSelected ? Colors.black : Colors.grey[600],
-          size: 26,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            AnimatedScale(
+              duration: const Duration(milliseconds: 300),
+              scale: isSelected ? 1.2 : 1.0,
+              curve: Curves.easeOutBack,
+              child: Icon(
+                isSelected ? activeIcon : inactiveIcon,
+                color: isSelected ? Colors.white : Colors.grey[500],
+                size: 26,
+              ),
+            ),
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 300),
+              height: isSelected ? 14 : 0,
+              child: AnimatedOpacity(
+                duration: const Duration(milliseconds: 300),
+                opacity: isSelected ? 1.0 : 0.0,
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 2),
+                  child: Text(
+                    label,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );

@@ -97,6 +97,17 @@ class ApiService {
     return jsonDecode(response.body);
   }
 
+  Future<Map<String, dynamic>> getUserInfo() async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/users/me'),
+      headers: await _getHeaders(),
+    );
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body);
+    }
+    throw Exception('Failed to load user info');
+  }
+
   Future<void> logout() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('auth_token');
@@ -112,7 +123,26 @@ class ApiService {
     _userId = null;
   }
 
-  Future<Map<String, dynamic>> updateProfileImage(String imageUrl) async {
+  Future<Map<String, dynamic>> updateProfile(String username, String phone) async {
+    final response = await http.put(
+      Uri.parse('$baseUrl/users/me'),
+      headers: await _getHeaders(),
+      body: jsonEncode({
+        'username': username,
+        'phone': phone,
+      }),
+    );
+    
+    final result = jsonDecode(response.body);
+    if (response.statusCode == 200 && result['success'] == true) {
+      _userName = username;
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('user_name', username);
+    }
+    return result;
+  }
+
+  Future<Map<String, dynamic>> updateProfileImageUrl(String imageUrl) async {
     final response = await http.put(
       Uri.parse('$baseUrl/users/me/profile-image'),
       headers: await _getHeaders(),
@@ -353,5 +383,62 @@ class ApiService {
       headers: await _getHeaders(),
     );
     return jsonDecode(response.body);
+  }
+
+  Future<int> getCartCount() async {
+    try {
+      final cart = await getCart();
+      final items = cart['items'] as List<dynamic>?;
+      return items?.length ?? 0;
+    } catch (e) {
+      return 0;
+    }
+  }
+
+  // Favorites
+  Future<List<dynamic>> getFavorites() async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/favorites'),
+      headers: await _getHeaders(),
+    );
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      return data['favorites'] ?? [];
+    }
+    return [];
+  }
+
+  Future<Map<String, dynamic>> toggleFavorite(int productId) async {
+    print('Requesting Toggle Favorite for product: $productId');
+    final response = await http.post(
+      Uri.parse('$baseUrl/favorites/toggle'),
+      headers: await _getHeaders(),
+      body: jsonEncode({'productId': productId}),
+    );
+    print('Toggle Favorite Response: ${response.statusCode} - ${response.body}');
+    return jsonDecode(response.body);
+  }
+
+  Future<List<dynamic>> getTrendingFavorites() async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/favorites/trending'),
+      headers: await _getHeaders(),
+    );
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      return data['trending'] ?? [];
+    }
+    return [];
+  }
+
+  Future<List<dynamic>> searchProducts(String query) async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/products/search?q=${Uri.encodeComponent(query)}'),
+      headers: await _getHeaders(),
+    );
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body);
+    }
+    return [];
   }
 }

@@ -13,6 +13,58 @@ class _MenuDetailScreenState extends State<MenuDetailScreen> {
   final ApiService _apiService = ApiService();
   int _quantity = 1;
   bool _isLoading = false;
+  bool _isFavorited = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchFavoriteStatus();
+  }
+
+  Future<void> _fetchFavoriteStatus() async {
+    try {
+      final favorites = await _apiService.getFavorites();
+      if (mounted) {
+        setState(() {
+          _isFavorited = favorites.any((f) => f['id'] == widget.product['id']);
+        });
+      }
+    } catch (e) {
+      // Handle error or ignore if not logged in
+    }
+  }
+
+  Future<void> _toggleFavorite() async {
+    if (!_apiService.isLoggedIn) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('즐겨찾기를 사용하려면 로그인이 필요합니다.')),
+        );
+      }
+      return;
+    }
+
+    try {
+      final result = await _apiService.toggleFavorite(widget.product['id']);
+      if (mounted) {
+        if (result['success'] == true) {
+          setState(() {
+            _isFavorited = result['isFavorited'];
+          });
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(result['message'] ?? '오류가 발생했습니다.')),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('연동 오류: $e')),
+        );
+      }
+    }
+  }
 
   // Options State
   String _selectedPatty = '싱글 패티'; // Default mandatory option
@@ -130,7 +182,14 @@ class _MenuDetailScreenState extends State<MenuDetailScreen> {
                     fontWeight: FontWeight.w800,
                   ),
                 ),
-                const SizedBox(width: 48), // Spacer for balance
+                IconButton(
+                  onPressed: _toggleFavorite,
+                  icon: Icon(
+                    _isFavorited ? Icons.favorite : Icons.favorite_border,
+                    color: _isFavorited ? Colors.red : Colors.black,
+                    size: 28,
+                  ),
+                ),
               ],
             ),
           ),

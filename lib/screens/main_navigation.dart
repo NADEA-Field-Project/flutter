@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'home_screen.dart';
+import 'favorites_screen.dart';
 import 'order_list_screen.dart';
 import 'profile_screen.dart';
 
@@ -12,17 +13,29 @@ class MainNavigation extends StatefulWidget {
 
 class _MainNavigationState extends State<MainNavigation> {
   int _selectedIndex = 0;
+  int _refreshCounter = 0;
 
-  final List<Widget> _screens = [
-    const HomeScreen(),
-    const Center(child: Text('Favorites (Coming Soon)')),
-    const OrderListScreen(),
-    const ProfileScreen(),
-  ];
+  late final List<Widget> _screens;
+
+  @override
+  void initState() {
+    super.initState();
+    _screens = [
+      const HomeScreen(),
+      FavoritesScreen(key: ValueKey('fav_$_refreshCounter')),
+      const OrderListScreen(),
+      const ProfileScreen(),
+    ];
+  }
 
   void _onItemTapped(int index) {
     setState(() {
       _selectedIndex = index;
+      if (index == 1) {
+        _refreshCounter++;
+        // Update _screens since it's used in IndexedStack
+        _screens[1] = FavoritesScreen(key: ValueKey('fav_$_refreshCounter'));
+      }
     });
   }
 
@@ -30,64 +43,52 @@ class _MainNavigationState extends State<MainNavigation> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
-      body: Stack(
-        children: [
-          IndexedStack(
-            index: _selectedIndex,
-            children: _screens,
-          ),
-          Positioned(
-            left: 20,
-            right: 20,
-            bottom: 20,
-            child: Container(
-              height: 70,
-              padding: const EdgeInsets.symmetric(horizontal: 10),
-              decoration: BoxDecoration(
-                color: Colors.black,
-                borderRadius: BorderRadius.circular(35),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.3),
-                    blurRadius: 20,
-                    offset: const Offset(0, 10),
-                  ),
-                ],
-              ),
-              child: Stack(
-                alignment: Alignment.center,
-                children: [
-                  // Sliding background indicator
-                  AnimatedAlign(
-                    duration: const Duration(milliseconds: 400),
-                    curve: Curves.elasticOut,
-                    alignment: Alignment(
-                      -1.0 + (_selectedIndex * (2.0 / (_screens.length - 1))),
-                      0,
-                    ),
-                    child: Container(
-                      width: 50,
-                      height: 50,
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.15),
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                  ),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceAround,
-                    children: [
-                      _buildNavItem(0, 'Home', Icons.home_rounded, Icons.home_outlined),
-                      _buildNavItem(1, 'Favs', Icons.favorite_rounded, Icons.favorite_border_rounded),
-                      _buildNavItem(2, 'Orders', Icons.receipt_long_rounded, Icons.receipt_long_outlined),
-                      _buildNavItem(3, 'Profile', Icons.person_rounded, Icons.person_outline_rounded),
-                    ],
-                  ),
-                ],
-              ),
+      body: IndexedStack(
+        index: _selectedIndex,
+        children: _screens,
+      ),
+      bottomNavigationBar: Container(
+        height: 80,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          border: Border(
+            top: BorderSide(
+              color: Colors.grey[200]!,
+              width: 1,
             ),
           ),
-        ],
+        ),
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            // Sliding background indicator
+            AnimatedAlign(
+              duration: const Duration(milliseconds: 400),
+              curve: Curves.elasticOut,
+              alignment: Alignment(
+                -1.0 + (_selectedIndex * (2.0 / (_screens.length - 1))),
+                0,
+              ),
+              child: Container(
+                width: 50,
+                height: 50,
+                decoration: BoxDecoration(
+                  color: Colors.black.withOpacity(0.05),
+                  shape: BoxShape.circle,
+                ),
+              ),
+            ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                _buildNavItem(0, 'Home', Icons.home_filled, Icons.home_outlined),
+                _buildNavItem(1, 'Favorites', Icons.favorite, Icons.favorite_border),
+                _buildNavItem(2, 'Orders', Icons.receipt_long, Icons.receipt_long_outlined),
+                _buildNavItem(3, 'Profile', Icons.person, Icons.person_outline),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -97,8 +98,8 @@ class _MainNavigationState extends State<MainNavigation> {
     return GestureDetector(
       onTap: () => _onItemTapped(index),
       behavior: HitTestBehavior.opaque,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12),
+      child: SizedBox(
+        width: 80,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -108,13 +109,13 @@ class _MainNavigationState extends State<MainNavigation> {
               curve: Curves.easeOutBack,
               child: Icon(
                 isSelected ? activeIcon : inactiveIcon,
-                color: isSelected ? Colors.white : Colors.grey[500],
+                color: isSelected ? Colors.black : Colors.grey[400],
                 size: 26,
               ),
             ),
             AnimatedContainer(
               duration: const Duration(milliseconds: 300),
-              height: isSelected ? 14 : 0,
+              height: isSelected ? 16 : 0,
               child: AnimatedOpacity(
                 duration: const Duration(milliseconds: 300),
                 opacity: isSelected ? 1.0 : 0.0,
@@ -123,8 +124,8 @@ class _MainNavigationState extends State<MainNavigation> {
                   child: Text(
                     label,
                     style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 10,
+                      color: Colors.black,
+                      fontSize: 12,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
@@ -136,4 +137,5 @@ class _MainNavigationState extends State<MainNavigation> {
       ),
     );
   }
+
 }

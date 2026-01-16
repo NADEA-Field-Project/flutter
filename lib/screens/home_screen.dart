@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../services/api_service.dart';
 import 'menu_detail_screen.dart';
 import 'cart_screen.dart';
+import 'search_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -14,6 +15,7 @@ class _HomeScreenState extends State<HomeScreen> {
   final ApiService _apiService = ApiService();
   List<dynamic> _categories = [];
   List<dynamic> _products = [];
+  Set<int> _favoritedIds = {};
   bool _isLoading = true;
   int? _selectedCategoryId;
   int _cartItemCount = 0;
@@ -30,6 +32,7 @@ class _HomeScreenState extends State<HomeScreen> {
     try {
       final categories = await _apiService.getCategories();
       final products = await _apiService.getProducts();
+      await _fetchFavorites(); // Fetch current user's favorites
       setState(() {
         _categories = categories;
         _products = products;
@@ -42,6 +45,55 @@ class _HomeScreenState extends State<HomeScreen> {
         );
       }
       setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _fetchFavorites() async {
+    try {
+      final favorites = await _apiService.getFavorites();
+      if (mounted) {
+        setState(() {
+          _favoritedIds = favorites.map((f) => f['id'] as int).toSet();
+        });
+      }
+    } catch (e) {
+      // Ignore if not logged in
+    }
+  }
+
+  Future<void> _toggleFavorite(int productId) async {
+    if (!_apiService.isLoggedIn) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('즐겨찾기를 사용하려면 로그인이 필요합니다.')),
+        );
+      }
+      return;
+    }
+    
+    try {
+      final result = await _apiService.toggleFavorite(productId);
+      if (mounted) {
+        if (result['success'] == true) {
+          setState(() {
+            if (result['isFavorited'] == true) {
+              _favoritedIds.add(productId);
+            } else {
+              _favoritedIds.remove(productId);
+            }
+          });
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(result['message'] ?? '오류가 발생했습니다.')),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('연동 오류: $e')),
+        );
+      }
     }
   }
 
@@ -148,7 +200,15 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
                 Row(
                   children: [
-                    const Icon(Icons.search, size: 26, color: Colors.black),
+                    GestureDetector(
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (context) => const SearchScreen()),
+                        );
+                      },
+                      child: const Icon(Icons.search, size: 26, color: Colors.black),
+                    ),
                     const SizedBox(width: 16),
                     GestureDetector(
                       onTap: () async {
@@ -381,31 +441,22 @@ class _HomeScreenState extends State<HomeScreen> {
                                     itemCount: _products.length,
                                     itemBuilder: (context, index) {
                                       final product = _products[index];
-                                      return GestureDetector(
+                                      return _MenuCard(
+                                        product: product,
+                                        isFavorited: _favoritedIds.contains(product['id']),
+                                        onFavoriteToggle: () => _toggleFavorite(product['id']),
+                                        onAddTap: () => _handleAddToCart(product['id'], product['name']),
                                         onTap: () async {
-                                          final result = await Navigator.push(
+                                          await Navigator.push(
                                             context,
                                             MaterialPageRoute(
-                                              builder: (context) =>
-                                                  MenuDetailScreen(product: product),
+                                              builder: (context) => MenuDetailScreen(product: product),
                                             ),
                                           );
-                                          if (result == true) {
-                                            _fetchCartCount();
-                                          }
+                                          // Always refresh favorites and cart count after returning from detail
+                                          _fetchFavorites();
+                                          _fetchCartCount();
                                         },
-                                        child: _MenuCard(
-                                          title: product['name'],
-                                          subtitle: product['description'] ?? '',
-                                          price: product['price'].toString(),
-                                          imageUrl: product['image_url'] ??
-                                              'https://images.unsplash.com/photo-1568901346375-23c9450c58cd',
-                                          isVegan: product['is_vegan'] ?? false,
-                                          onAddToCart: () => _handleAddToCart(
-                                            product['id'],
-                                            product['name'],
-                                          ),
-                                        ),
                                       );
                                     },
                                   ),
@@ -472,134 +523,151 @@ class _CategoryChip extends StatelessWidget {
 }
 
 class _MenuCard extends StatelessWidget {
-  final String title;
-  final String subtitle;
-  final String price;
-  final String imageUrl;
-  final bool isVegan;
-  final VoidCallback? onAddToCart;
+  final dynamic product;
+  final bool isFavorited;
+  final VoidCallback onFavoriteToggle;
+  final VoidCallback onAddTap;
+  final VoidCallback onTap;
 
   const _MenuCard({
-    required this.title,
-    required this.subtitle,
-    required this.price,
-    required this.imageUrl,
-    this.isVegan = false,
-    this.onAddToCart,
+    required this.product,
+    required this.isFavorited,
+    required this.onFavoriteToggle,
+    required this.onAddTap,
+    required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Expanded(
-          child: Stack(
-            children: [
-              Container(
-                width: double.infinity,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(16),
-                  color: Colors.grey[100],
-                  image: DecorationImage(
-                    image: NetworkImage(imageUrl),
-                    fit: BoxFit.cover,
-                  ),
-                ),
-              ),
-              // Favorite button
-              Positioned(
-                top: 10,
-                right: 10,
-                child: Container(
-                  padding: const EdgeInsets.all(6),
+    final String title = product['name'] ?? '';
+    final String subtitle = product['description'] ?? '';
+    final String price = product['price']?.toString() ?? '0';
+    final String imageUrl = product['image_url'] ?? 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd';
+    final bool isVegan = product['is_vegan'] ?? false;
+
+    // Formatting price with commas
+    final formattedPrice = price.replaceAllMapped(
+      RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
+      (Match m) => '${m[1]},',
+    );
+
+    return GestureDetector(
+      onTap: onTap,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Stack(
+              children: [
+                Container(
+                  width: double.infinity,
                   decoration: BoxDecoration(
-                    color: Colors.black,
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(
-                    Icons.favorite,
-                    size: 16,
-                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    color: Colors.grey[100],
+                    image: DecorationImage(
+                      image: NetworkImage(imageUrl),
+                      fit: BoxFit.cover,
+                    ),
                   ),
                 ),
-              ),
-              // Vegan badge
-              if (isVegan)
+                // Favorite button
                 Positioned(
-                  bottom: 10,
+                  top: 10,
                   right: 10,
-                  child: Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: Colors.green,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: const Text(
-                      'VEGAN',
-                      style: TextStyle(
+                  child: GestureDetector(
+                    onTap: () {
+                      onFavoriteToggle();
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: const BoxDecoration(
                         color: Colors.white,
-                        fontSize: 9,
-                        fontWeight: FontWeight.bold,
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        isFavorited ? Icons.favorite : Icons.favorite_border,
+                        size: 16,
+                        color: isFavorited ? Colors.red : Colors.grey[400],
                       ),
                     ),
                   ),
                 ),
+                // Vegan badge
+                if (isVegan)
+                  Positioned(
+                    bottom: 10,
+                    right: 10,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.green,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Text(
+                        'VEGAN',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 9,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            title,
+            style: const TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.bold,
+              color: Colors.black,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          const SizedBox(height: 2),
+          Text(
+            subtitle,
+            style: TextStyle(
+              fontSize: 11,
+              color: Colors.grey[500],
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          const SizedBox(height: 6),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                '₩$formattedPrice',
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black,
+                ),
+              ),
+              GestureDetector(
+                onTap: onAddTap,
+                child: Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: const BoxDecoration(
+                    color: Colors.black,
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.add,
+                    size: 18,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
             ],
           ),
-        ),
-        const SizedBox(height: 10),
-        Text(
-          title,
-          style: const TextStyle(
-            fontSize: 15,
-            fontWeight: FontWeight.bold,
-            color: Colors.black,
-          ),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        ),
-        const SizedBox(height: 2),
-        Text(
-          subtitle,
-          style: TextStyle(
-            fontSize: 11,
-            color: Colors.grey[500],
-          ),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        ),
-        const SizedBox(height: 6),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(
-              '₩$price',
-              style: const TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                color: Colors.black,
-              ),
-            ),
-            GestureDetector(
-              onTap: onAddToCart,
-              child: Container(
-                padding: const EdgeInsets.all(6),
-                decoration: BoxDecoration(
-                  color: Colors.black,
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  Icons.add,
-                  size: 18,
-                  color: Colors.white,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ],
+        ],
+      ),
     );
   }
 }

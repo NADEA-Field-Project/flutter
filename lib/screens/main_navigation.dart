@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'home_screen.dart';
 import 'favorites_screen.dart';
 import 'order_list_screen.dart';
@@ -41,53 +42,64 @@ class _MainNavigationState extends State<MainNavigation> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.white,
-      body: IndexedStack(
-        index: _selectedIndex,
-        children: _screens,
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: const SystemUiOverlayStyle(
+        systemNavigationBarColor: Colors.white,
+        systemNavigationBarIconBrightness: Brightness.dark,
+        statusBarColor: Colors.transparent,
+        statusBarIconBrightness: Brightness.dark,
       ),
-      bottomNavigationBar: Container(
-        height: 80,
-        decoration: BoxDecoration(
-          color: Colors.white,
-          border: Border(
-            top: BorderSide(
-              color: Colors.grey[200]!,
-              width: 1,
-            ),
-          ),
+      child: Scaffold(
+        backgroundColor: Colors.white,
+        body: IndexedStack(
+          index: _selectedIndex,
+          children: _screens,
         ),
-        child: Stack(
-          alignment: Alignment.center,
-          children: [
-            // Sliding background indicator
-            AnimatedAlign(
-              duration: const Duration(milliseconds: 400),
-              curve: Curves.elasticOut,
-              alignment: Alignment(
-                -1.0 + (_selectedIndex * (2.0 / (_screens.length - 1))),
-                0,
-              ),
-              child: Container(
-                width: 50,
-                height: 50,
-                decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.05),
-                  shape: BoxShape.circle,
+        bottomNavigationBar: SafeArea(
+          bottom: true,
+          child: Container(
+            height: 80,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              border: Border(
+                top: BorderSide(
+                  color: Colors.grey[200]!,
+                  width: 1,
                 ),
               ),
             ),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
+            child: Stack(
+              alignment: Alignment.center,
               children: [
-                _buildNavItem(0, 'Home', Icons.home_filled, Icons.home_outlined),
-                _buildNavItem(1, 'Favorites', Icons.favorite, Icons.favorite_border),
-                _buildNavItem(2, 'Orders', Icons.receipt_long, Icons.receipt_long_outlined),
-                _buildNavItem(3, 'Profile', Icons.person, Icons.person_outline),
+                // Sliding background indicator
+                AnimatedAlign(
+                  duration: const Duration(milliseconds: 400),
+                  curve: Curves.elasticOut,
+                  alignment: Alignment(
+                    -1.0 + (_selectedIndex * (2.0 / (_screens.length - 1))),
+                    0,
+                  ),
+                  child: Container(
+                    width: 50,
+                    height: 50,
+                    decoration: BoxDecoration(
+                      color: Colors.black.withOpacity(0.05),
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                ),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                  children: [
+                    _buildNavItem(0, 'Home', Icons.home_filled, Icons.home_outlined),
+                    _buildNavItem(1, 'Favorites', Icons.favorite, Icons.favorite_border),
+                    _buildNavItem(2, 'Orders', Icons.receipt_long, Icons.receipt_long_outlined),
+                    _buildNavItem(3, 'Profile', Icons.person, Icons.person_outline),
+                  ],
+                ),
               ],
             ),
-          ],
+          ),
         ),
       ),
     );

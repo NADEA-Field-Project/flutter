@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../services/api_service.dart';
@@ -65,12 +66,32 @@ class _ProfileScreenState extends State<ProfileScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('이미지 URL 입력'),
-        content: TextField(
-          controller: urlController,
-          decoration: const InputDecoration(
-            hintText: 'https://example.com/image.jpg',
-            border: OutlineInputBorder(),
-          ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: urlController,
+              decoration: const InputDecoration(
+                hintText: 'https://example.com/image.jpg',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 8),
+            TextButton.icon(
+              onPressed: () async {
+                final data = await Clipboard.getData(Clipboard.kTextPlain);
+                if (data?.text != null) {
+                  urlController.text = data!.text!;
+                }
+              },
+              icon: const Icon(Icons.paste, size: 18),
+              label: const Text('클립보드에서 붙여넣기'),
+              style: TextButton.styleFrom(
+                foregroundColor: Colors.grey[700],
+                padding: EdgeInsets.zero,
+              ),
+            ),
+          ],
         ),
         actions: [
           TextButton(
